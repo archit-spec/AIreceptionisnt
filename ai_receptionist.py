@@ -39,35 +39,47 @@ class AIReceptionist:
                 {"role": "user", "content": user_input},
             ]
 
+            print("Sending request to Groq API...")
             response = await self.client.chat.completions.create(
                 model="llama3-70b-8192",
                 messages=messages,
-                device=self.device  # Use the determined device
             )
+            print("Received response from Groq API")
 
-            function_args = json.loads(response.choices[0].message.function_call.arguments)
-            
-            new_state = State[function_args["new_state"]]
-            self.state_manager.transition_to(new_state)
-            
-            if "context_updates" in function_args:
-                self.state_manager.update_context(**function_args["context_updates"])
+            if not response.choices or not response.choices[0].message:
+                raise Exception("No response received from the API")
 
-            if new_state == State.EMERGENCY:
-                emergency_type = function_args.get("context_updates", {}).get("emergency_type")
-                if emergency_type:
-                    db_result = await self.get_instructions_from_db(emergency_type)
-                    if db_result["source"] == "vector_db":
-                        function_args["response"] += f"\n\nHere are some first aid instructions for {db_result['tag']} (retrieved from my knowledge base):\n{db_result['response']}"
-                        function_args["response"] += f"\n(Confidence score: {db_result['score']:.2f})"
-                    else:
-                        function_args["response"] += f"\n\n{db_result['response']}"
+            ai_response = response.choices[0].message.content
+            print(f"AI response: {ai_response}")
 
-            return function_args["response"]
+            # Parse the AI response
+            try:
+                parsed_response = json.loads(ai_response)
+                new_state = State[parsed_response.get("new_state", "INITIAL")]
+                self.state_manager.transition_to(new_state)
+                
+                if "context_updates" in parsed_response:
+                    self.state_manager.update_context(**parsed_response["context_updates"])
+
+                if new_state == State.EMERGENCY:
+                    emergency_type = parsed_response.get("context_updates", {}).get("emergency_type")
+                    if emergency_type:
+                        db_result = await self.get_instructions_from_db(emergency_type)
+                        if db_result["source"] == "vector_db":
+                            parsed_response["response"] += f"\n\nHere are some first aid instructions for {db_result['tag']} (retrieved from my knowledge base):\n{db_result['response']}"
+                            parsed_response["response"] += f"\n(Confidence score: {db_result['score']:.2f})"
+                        else:
+                            parsed_response["response"] += f"\n\n{db_result['response']}"
+
+                return parsed_response.get("response", "I'm sorry, I couldn't generate a proper response.")
+
+            except json.JSONDecodeError:
+                print(f"Failed to parse AI response as JSON: {ai_response}")
+                return ai_response  # Return the raw response if it's not in the expected JSON format
 
         except Exception as e:
-            print(f"An error occurred: {str(e)}")
-            return "I'm sorry, an error occurred while processing your request."
+            print(f"An error occurred in generate_response: {str(e)}")
+            return "I'm sorry, an error occurred while processing your request. Please try again later."
 
     def get_state_context(self) -> dict:
         return self.state_manager.get_context()

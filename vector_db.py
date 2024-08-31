@@ -3,6 +3,7 @@ from qdrant_client.http import models
 from sentence_transformers import SentenceTransformer
 import json
 import torch
+from functools import lru_cache
 
 class VectorDB:
     def __init__(self):
@@ -39,7 +40,7 @@ class VectorDB:
             responses = intent['responses']
 
             # Batch encode patterns for efficiency
-            embeddings = self.model.encode(patterns, device=self.device, show_progress_bar=True)
+            embeddings = self.encode_batch(patterns)
 
             for pattern, embedding in zip(patterns, embeddings):
                 points.append(
@@ -59,8 +60,15 @@ class VectorDB:
             points=points
         )
 
+    @lru_cache(maxsize=1000)
+    def encode_single(self, text):
+        return self.model.encode(text, device=self.device)
+
+    def encode_batch(self, texts):
+        return [self.encode_single(text) for text in texts]
+
     def search(self, query, limit=1):
-        query_vector = self.model.encode([query], device=self.device)[0]
+        query_vector = self.encode_single(query)
         search_result = self.client.search(
             collection_name=self.collection_name,
             query_vector=query_vector.tolist(),
