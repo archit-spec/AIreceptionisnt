@@ -66,7 +66,14 @@ class VectorDB:
             query_vector=query_vector.tolist(),
             limit=limit
         )
-        return search_result
+        if search_result:
+            return {
+                "source": "vector_db",
+                "tag": search_result[0].payload['tag'],
+                "response": search_result[0].payload['response'],
+                "score": search_result[0].score
+            }
+        return None
 
     def get_collections(self):
         return self.client.get_collections()

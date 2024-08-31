@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, WebSocket, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from ai_receptionist import AIReceptionist
@@ -37,10 +37,20 @@ async def root(request: Request):
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    while True:
-        data = await websocket.receive_text()
-        response = await receptionist.process_input(data)
-        await websocket.send_text(response)
+    try:
+        while True:
+            try:
+                data = await websocket.receive_text()
+                response = await receptionist.process_input(data)
+                await websocket.send_text(response)
+            except WebSocketDisconnect:
+                print("WebSocket disconnected")
+                break
+            except Exception as e:
+                print(f"An error occurred in websocket_endpoint: {str(e)}")
+                await websocket.send_text("I'm sorry, an error occurred. Please try again.")
+    finally:
+        print("WebSocket connection closed")
 
 @app.get("/state")
 async def get_state(request: Request):

@@ -56,21 +56,28 @@ class AIReceptionist:
             if new_state == State.EMERGENCY:
                 emergency_type = function_args.get("context_updates", {}).get("emergency_type")
                 if emergency_type:
-                    instructions = await self.get_instructions_from_db(emergency_type)
-                    function_args["response"] += f"\n\nHere are some first aid instructions:\n{instructions}"
+                    db_result = await self.get_instructions_from_db(emergency_type)
+                    if db_result["source"] == "vector_db":
+                        function_args["response"] += f"\n\nHere are some first aid instructions for {db_result['tag']} (retrieved from my knowledge base):\n{db_result['response']}"
+                        function_args["response"] += f"\n(Confidence score: {db_result['score']:.2f})"
+                    else:
+                        function_args["response"] += f"\n\n{db_result['response']}"
 
             return function_args["response"]
 
         except Exception as e:
             print(f"An error occurred: {str(e)}")
-            return "I'm sorry, an error occurred. Could you please try again?"
+            return "I'm sorry, an error occurred while processing your request."
 
     def get_state_context(self) -> dict:
         return self.state_manager.get_context()
 
-    async def get_instructions_from_db(self, query: str) -> str:
+    async def get_instructions_from_db(self, query: str) -> dict:
         search_result = self.vector_db.search(query)
         if search_result:
-            return search_result[0].payload['response']
-        return "I'm sorry, I couldn't find any specific instructions for that situation."
+            return search_result
+        return {
+            "source": "fallback",
+            "response": "I'm sorry, I couldn't find any specific instructions for that situation in my database."
+        }
 
