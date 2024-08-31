@@ -3,9 +3,15 @@ from fastapi import FastAPI, WebSocket, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from ai_receptionist import AIReceptionist
+from vector_db import VectorDB
+#from fastapi_cache import FastAPICache
+#from fastapi_cache.decorator import cache
 
 app = FastAPI()
-
+    
+#@cache()
+#async def get_cache():
+#    return 1
 # Serve static files (CSS, JS)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -13,6 +19,16 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 receptionist = AIReceptionist()
+
+vector_db = VectorDB()
+print("Available collections:", vector_db.get_collections())
+
+# Initialize the collection and load data only if it doesn't exist
+if "emergency_instructions" not in [c.name for c in vector_db.get_collections().collections]:
+    vector_db.initialize_collection()
+    vector_db.load_data('emergency_instructions.json')
+else:
+    print("Collection 'emergency_instructions' already exists. Skipping initialization.")
 
 @app.get("/")
 async def root(request: Request):

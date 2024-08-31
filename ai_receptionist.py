@@ -1,9 +1,10 @@
-import random
+import json
 from groq import AsyncGroq
 import os
-import json
 from state_manager import StateManager, State
 from jinja2 import Environment, FileSystemLoader
+from vector_db import VectorDB
+import torch
 
 class AIReceptionist:
     def __init__(self):
@@ -11,6 +12,11 @@ class AIReceptionist:
         self.client = AsyncGroq(api_key=os.environ.get("GROQ_API_KEY"))
         self.conversation_history = []
         self.jinja_env = Environment(loader=FileSystemLoader('templates/prompts'))
+        self.vector_db = VectorDB()
+        
+        # Check if CUDA is available
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"AIReceptionist using device: {self.device}")
 
     async def process_input(self, user_input: str) -> str:
         self.conversation_history.append({"role": "user", "content": user_input})
@@ -24,92 +30,47 @@ class AIReceptionist:
         try:
             system_prompt = self.jinja_env.get_template('system_prompt.j2').render(
                 current_state=self.state_manager.state,
-                emergency_type=self.state_manager.emergency_type,
-                location=self.state_manager.location,
-                message=self.state_manager.message
+                context=self.state_manager.get_context()
             )
-
-            state_template_name = f'{self.state_manager.state.name.lower()}_state.j2'
-            try:
-                state_prompt = self.jinja_env.get_template(state_template_name).render(
-                    user_input=user_input,
-                    emergency_type=self.state_manager.emergency_type
-                )
-            except jinja2.exceptions.TemplateNotFound:
-                print(f"Template not found: {state_template_name}")
-                state_prompt = f"User input: '{user_input}'"
 
             messages = [
                 {"role": "system", "content": system_prompt},
                 *self.conversation_history,
                 {"role": "user", "content": user_input},
-                {"role": "user", "content": state_prompt}
             ]
 
             response = await self.client.chat.completions.create(
                 model="llama3-70b-8192",
                 messages=messages,
-                max_tokens=150
+                device=self.device  # Use the determined device
             )
 
-            ai_response = response.choices[0].message.content
-            try:
-                function_args = json.loads(ai_response)
-                
-                if self.state_manager.state == State.INITIAL:
-                    if function_args.get("is_emergency"):
-                        self.state_manager.transition_to_emergency(function_args.get("emergency_type", ""))
-                    elif function_args.get("is_message"):
-                        self.state_manager.transition_to_message(function_args.get("message", ""))
-                elif self.state_manager.state == State.EMERGENCY:
-                    self.state_manager.transition_to_location("")
-                elif self.state_manager.state == State.LOCATION:
-                    location = function_args.get("location", user_input)
-                    eta = function_args.get("eta", 15)  # Default to 15 minutes if not provided
-                    instructions = function_args.get("instructions", "Please stay calm and apply pressure to the wound.")
-                    
-                    response = (f"I understand your location is {location}. Dr. Adrin will be there in approximately "
-                                f"{eta} minutes. In the meantime, here are some instructions: {instructions}")
-                    
-                    self.state_manager.transition_to_location(location)
-                    self.state_manager.transition_to_final()
-                    return response
+            function_args = json.loads(response.choices[0].message.function_call.arguments)
+            
+            new_state = State[function_args["new_state"]]
+            self.state_manager.transition_to(new_state)
+            
+            if "context_updates" in function_args:
+                self.state_manager.update_context(**function_args["context_updates"])
 
-                return function_args.get("response", "I'm sorry, I don't understand. Could you please repeat that?")
-            except json.JSONDecodeError:
-                if self.state_manager.state == State.LOCATION:
-                    # If we can't parse the JSON, assume the entire input is the location
-                    location = user_input
-                    eta = 15  # Default ETA
-                    instructions = "Please stay calm and apply pressure to the wound."
-                    
-                    response = (f"I understand your location is {location}. Dr. Adrin will be there in approximately "
-                                f"{eta} minutes. In the meantime, here are some instructions: {instructions}")
-                    
-                    self.state_manager.transition_to_location(location)
-                    self.state_manager.transition_to_final()
-                    return response
-                else:
-                    return "I'm sorry, I don't understand. Could you please repeat that?"
+            if new_state == State.EMERGENCY:
+                emergency_type = function_args.get("context_updates", {}).get("emergency_type")
+                if emergency_type:
+                    instructions = await self.get_instructions_from_db(emergency_type)
+                    function_args["response"] += f"\n\nHere are some first aid instructions:\n{instructions}"
+
+            return function_args["response"]
+
         except Exception as e:
             print(f"An error occurred: {str(e)}")
-            return "I'm sorry, an error occurred. Please try again later."
+            return "I'm sorry, an error occurred. Could you please try again?"
 
     def get_state_context(self) -> dict:
         return self.state_manager.get_context()
-    async def get_instructions(self, emergency_type: str) -> str:
-        instructions_prompt = self.jinja_env.get_template('instructions.j2').render(
-            emergency_type=emergency_type
-        )
 
-        response = await self.client.chat.completions.create(
-            model="llama3-70b-8192",
-            messages=[
-                {"role": "system", "content": "You are a medical expert providing emergency first aid instructions."},
-                {"role": "user", "content": instructions_prompt}
-            ],
-            max_tokens=150
-        )
-
-        return response.choices[0].message.content
+    async def get_instructions_from_db(self, query: str) -> str:
+        search_result = self.vector_db.search(query)
+        if search_result:
+            return search_result[0].payload['response']
+        return "I'm sorry, I couldn't find any specific instructions for that situation."
 
