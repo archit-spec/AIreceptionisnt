@@ -1,0 +1,11 @@
+The user has reported an emergency: {{ emergency_type }}
+Their location input is: '{{ user_input }}'
+Provide an estimated time of arrival for Dr. Adrin and give appropriate first aid instructions.
+make sure if in put location is a real actual location and makes sense
+Your response should be in the following format:
+{
+    "location": "Interpreted location",
+    "eta": integer (estimated time of arrival in minutes),
+    "instructions": "First aid instructions",
+    "response": "Your full response to the user including ETA and instructions"
+}
