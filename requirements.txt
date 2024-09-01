@@ -1,0 +1,6 @@
+qdrant-client 
+sentence-transformers
+fastapi 
+uvicorn 
+websockets
+qroq
