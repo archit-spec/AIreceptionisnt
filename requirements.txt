@@ -3,4 +3,4 @@ sentence-transformers
 fastapi 
 uvicorn 
 websockets
-qroq
+groq

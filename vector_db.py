@@ -25,7 +25,7 @@ class VectorDB:
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
         self.model = self.model.to(self.device)
         
-        self.collection_name = "emergency_instructions"
+        self.collection_name = "emergency_instructions2"
 
     def initialize_collection(self):
         self.client.recreate_collection(
@@ -38,7 +38,7 @@ class VectorDB:
             data = json.load(f)
 
         points = []
-        for i, intent in enumerate(data['root']['intents']):
+        for i, intent in enumerate(data['intents']):
             tag = intent['tag']
             patterns = intent['patterns']
             responses = intent['responses']
@@ -54,7 +54,7 @@ class VectorDB:
                         payload={
                             "tag": tag,
                             "pattern": pattern,
-                            "response": responses[0]
+                            "responses": responses  # Ensure this matches the key in your JSON
                         }
                     )
                 )
@@ -85,7 +85,7 @@ class VectorDB:
             return {
                 "source": "vector_db",
                 "tag": top_result.payload['tag'],
-                "response": top_result.payload['response'],
+                "response": top_result.payload['responses'][0],  # Access the first response
                 "score": top_result.score
             }
         logger.info(f"No search result found for query: {query}")
