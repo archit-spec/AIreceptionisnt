@@ -43,7 +43,7 @@
 
     {"tag": "Nasal Congestion",
      "patterns": ["How do you treat nasal Congestion?", "what to do if i get a nasal congestion?", "Which medicine to take if I have a nasal congestion?", "what to do if i have a blocked nose?", "How do you treat a blocked nose?", "How long does nasal congestion last?"],
-     "responses": ["When you’re stuffed up, focus on keeping your nasal passages and sinuses moist. To keep your nasal passages moist, you can: 1)Use a humidifier or vaporizer. 2)Drink lots of fluids. This will thin out your mucus, which could help prevent blocked sinuses. 3)Place a warm, wet towel on your face. It may relieve discomfort and open your nasal passages."],
+     "responses": ["When youre stuffed up, focus on keeping your nasal passages and sinuses moist. To keep your nasal passages moist, you can: 1)Use a humidifier or vaporizer. 2)Drink lots of fluids. This will thin out your mucus, which could help prevent blocked sinuses. 3)Place a warm, wet towel on your face. It may relieve discomfort and open your nasal passages."],
      "context_set": ""
     },
 

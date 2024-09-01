@@ -5,6 +5,9 @@ from state_manager import StateManager, State
 from jinja2 import Environment, FileSystemLoader
 from vector_db import VectorDB
 import torch
+import logging
+
+logger = logging.getLogger(__name__)
 
 class AIReceptionist:
     def __init__(self):
@@ -14,10 +17,8 @@ class AIReceptionist:
         self.jinja_env = Environment(loader=FileSystemLoader('templates/prompts'))
         self.vector_db = VectorDB()
         self.state_history = []
-        
-        # Check if CUDA is available
+        #this is for device for encoding qdrant query
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"AIReceptionist using device: {self.device}")
 
     async def process_input(self, user_input: str) -> str:
         self.conversation_history.append({"role": "user", "content": user_input})
@@ -83,9 +84,9 @@ class AIReceptionist:
                 if new_state == State.EMERGENCY:
                     emergency_type = parsed_response.get("context_updates", {}).get("emergency_type")
                     if emergency_type:
-                        print(f"Emergency type detected: {emergency_type}")
+                        logger.info(f"Emergency type detected: {emergency_type}")
                         db_result = await self.get_instructions_from_db(emergency_type)
-                        print(f"Database result: {db_result}")
+                        logger.info(f"Database result: {db_result}")
                         if db_result["source"] == "vector_db":
                             parsed_response["response"] += f"\n\nHere are some first aid instructions for {db_result['tag']} (retrieved from my knowledge base):\n{db_result['response']}"
                             parsed_response["response"] += f"\n(Confidence score: {db_result['score']:.2f})"
@@ -101,16 +102,19 @@ class AIReceptionist:
                 return ai_response  # Return the raw response if it's not in the expected JSON format
 
         except Exception as e:
-            print(f"An error occurred in generate_response: {str(e)}")
+            logger.error(f"An error occurred in generate_response: {str(e)}", exc_info=True)
             return "I'm sorry, an error occurred while processing your request. Please try again later."
 
     def get_state_context(self) -> dict:
         return self.state_manager.get_context()
 
     async def get_instructions_from_db(self, query: str) -> dict:
+        logger.info(f"Querying vector database for: {query}")
         search_result = self.vector_db.search(query)
         if search_result:
+            logger.info(f"Vector database returned result for: {query}")
             return search_result
+        logger.info(f"No result found in vector database for: {query}")
         return {
             "source": "fallback",
             "response": "I'm sorry, I couldn't find any specific instructions for that situation in my database."

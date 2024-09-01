@@ -4,6 +4,9 @@ from sentence_transformers import SentenceTransformer
 import json
 import torch
 from functools import lru_cache
+import logging
+
+logger = logging.getLogger(__name__)
 
 class VectorDB:
     def __init__(self):
@@ -69,6 +72,7 @@ class VectorDB:
         return [self.encode_single(text) for text in texts]
 
     def search(self, query, limit=1):
+        logger.info(f"Searching for query: {query}")
         query_vector = self.encode_single(query)
         search_result = self.client.search(
             collection_name=self.collection_name,
@@ -76,12 +80,15 @@ class VectorDB:
             limit=limit
         )
         if search_result:
+            logger.info(f"Search result found for query: {query}")
+            top_result = search_result[0]
             return {
                 "source": "vector_db",
-                "tag": search_result[0].payload['tag'],
-                "response": search_result[0].payload['response'],
-                "score": search_result[0].score
+                "tag": top_result.payload['tag'],
+                "response": top_result.payload['response'],
+                "score": top_result.score
             }
+        logger.info(f"No search result found for query: {query}")
         return None
 
     def get_collections(self):
