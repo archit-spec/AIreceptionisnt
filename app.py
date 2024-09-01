@@ -4,8 +4,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from ai_receptionist import AIReceptionist
 from vector_db import VectorDB
-#from fastapi_cache import FastAPICache
-#from fastapi_cache.decorator import cache
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
     
@@ -21,14 +24,15 @@ templates = Jinja2Templates(directory="templates")
 receptionist = AIReceptionist()
 
 vector_db = VectorDB()
-print("Available collections:", vector_db.get_collections())
+logger.info("Available collections: %s", vector_db.get_collections())
 
 # Initialize the collection and load data only if it doesn't exist
 if "emergency_instructions" not in [c.name for c in vector_db.get_collections().collections]:
     vector_db.initialize_collection()
     vector_db.load_data('emergency_instructions.json')
+    logger.info("Initialized 'emergency_instructions' collection and loaded data.")
 else:
-    print("Collection 'emergency_instructions' already exists. Skipping initialization.")
+    logger.info("Collection 'emergency_instructions' already exists. Skipping initialization.")
 
 @app.get("/")
 async def root(request: Request):
@@ -41,16 +45,18 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             try:
                 data = await websocket.receive_text()
+                logger.info("Received message: %s", data)
                 response = await receptionist.process_input(data)
+                logger.info("Sending response: %s", response)
                 await websocket.send_text(response)
             except WebSocketDisconnect:
-                print("WebSocket disconnected")
+                logger.info("WebSocket disconnected")
                 break
             except Exception as e:
-                print(f"An error occurred in websocket_endpoint: {str(e)}")
+                logger.error("An error occurred in websocket_endpoint: %s", str(e))
                 await websocket.send_text("I'm sorry, an error occurred. Please try again.")
     finally:
-        print("WebSocket connection closed")
+        logger.info("WebSocket connection closed")
 
 @app.get("/state")
 async def get_state(request: Request):
@@ -59,4 +65,4 @@ async def get_state(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="localhost", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

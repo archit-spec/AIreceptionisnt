@@ -12,12 +12,19 @@ class StateManager:
     def __init__(self):
         self.current_state: State = State.INITIAL
         self.context: Dict[str, Any] = {}
-
-    def transition_to(self, new_state: State):
+    # update states and return a string for logging
+    def transition_to(self, new_state: State) -> str:
+        old_state = self.current_state
         self.current_state = new_state
-
-    def update_context(self, **kwargs):
-        self.context.update(kwargs)
+        return f"State transitioned from {old_state.name} to {new_state.name}"
+    # same for context
+    def update_context(self, **kwargs) -> str:
+        updates = []
+        for key, value in kwargs.items():
+            old_value = self.context.get(key, "None")
+            self.context[key] = value
+            updates.append(f"{key}: {old_value} -> {value}")
+        return "Context updated: " + ", ".join(updates)
 
     def reset(self):
         self.__init__()
